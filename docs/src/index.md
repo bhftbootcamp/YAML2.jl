@@ -1,6 +1,12 @@
-# LibYAML.jl 
+# LibYAML.jl
 
-Julia wrapper package for parsing `yaml` files
+[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://bhftbootcamp.github.io/LibYAML.jl/stable/)
+[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://bhftbootcamp.github.io/LibYAML.jl/dev/)
+[![Build Status](https://github.com/bhftbootcamp/LibYAML.jl/actions/workflows/CI.yml/badge.svg?branch=master)](https://github.com/bhftbootcamp/LibYAML.jl/actions/workflows/CI.yml?query=branch%3Amaster)
+[![Coverage](https://codecov.io/gh/bhftbootcamp/LibYAML.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/bhftbootcamp/LibYAML.jl)
+[![Registry](https://img.shields.io/badge/registry-General-4063d8)](https://github.com/JuliaRegistries/General)
+
+A Julia wrapper for [libyaml](https://github.com/yaml/libyaml), providing fast and minimal YAML parsing.
 
 ## Installation
 
@@ -11,34 +17,48 @@ To install LibYAML, simply use the Julia package manager:
 ```
 
 ## Usage
+
+A basic example of parsing structured YAML data in Julia, including anchors and merge keys:
+
 ```julia
 using LibYAML
 
-yaml_str = """
-retCode: 0
-retMsg: "OK"
-result:
-  ap: 0.6636
-  bp: 0.6634
-  h: 0.6687
-  l: 0.6315
-  lp: 0.6633
-  o: 0.6337
-  qv: 1.1594252877069e7
-  s: "ADAUSDT"
-  t: "2024-03-25T19:05:35.491"
-  v: 1.780835204e7
-retExtInfo: {}
-time: "2024-03-25T19:05:38.912"
+yaml_config = """
+defaults: &defaults
+  port: !!int 443
+  enable_tls: true
+
+server:
+  <<: *defaults
+  bind_address: "0.0.0.0"
+  tls:
+    cert_file: "/etc/certs/cert_file.pem"
+    key_file: "/etc/certs/key_file.pem"
+
+metrics:
+  prometheus_enabled: true
+  listen: "0.0.0.0:9100"
+  service_labels: {service: "secure-backend"}
+
+role_defaults: &role_defaults
+  permissions:
+    - read
+    - write
+
+users:
+  - username: "admin"
+    <<: *role_defaults
+  - username: "stanislav"
+    <<: *role_defaults
+    permissions:
+      - read
 """
 
-julia> parse_yaml(yaml_str)
+julia> parse_yaml(yaml_config)
 Dict{String, Any} with 5 entries:
-  "retExtInfo" => Dict{String, Any}()
-  "time"       => "2024-03-25T19:05:38.912"
-  "retCode"    => "0"
-  "retMsg"     => "OK"
-  "result"     => Dict{String, Any}("v"=>"1.780835204e7", "ap"=>"0.6636", "o"=>"0.6337", "t"=>"2024-03-25T19:05:35.491", "qv"=>"1.15942…
+  "metrics" => Dict{String,Any}("listen"=>"0.0.0.0:9100", …)
+  "users"   => Any[...]
+  ...
 ```
 
 ## Useful Links

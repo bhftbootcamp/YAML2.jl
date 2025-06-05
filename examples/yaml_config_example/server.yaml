@@ -1,0 +1,7 @@
+bind_address: "0.0.0.0"
+port: 443
+enable_tls: true
+tls:
+  cert_file: "/etc/certs/fullchain.pem"
+  key_file: "/etc/certs/privkey.pem"
+  client_auth: "optional"

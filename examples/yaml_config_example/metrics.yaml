@@ -1,0 +1,8 @@
+prometheus_enabled: true
+listen: "0.0.0.0:9100"
+path: "/metrics"
+service_labels:
+  service: "secure-backend"
+  environment: "production"
+pprof_enabled: true
+tracing_sample_rate: 0.05
