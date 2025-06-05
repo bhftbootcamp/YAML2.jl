@@ -1,11 +1,11 @@
 name = "LibYAML"
-uuid = "42d63396-a25e-4f20-b08f-81fd7e982f95"
+uuid = "ea63f084-1c5d-45c5-8232-09ccaa2e0026"
 version = "0.1.0"
 
 [deps]
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 LibYAML_jll = "f531010a-71ee-5b11-8e71-2f13f29d8a82"
-Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [compat]
+LibYAML_jll = "0.2.6"
 julia = "1.8"

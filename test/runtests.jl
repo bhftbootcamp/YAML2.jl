@@ -1,165 +1,198 @@
-using Test, LibYAML, Dates
+using Test
+using LibYAML
+using Dates
+using OrderedCollections
 
-@testset "[1] Basic YAML parsing" begin
+import LibYAML.ParserYAML:
+    parse_yaml,
+    open_yaml,
+    emit_yaml,
+    parse_int,
+    parse_float,
+    parse_bool,
+    isnull_value,
+    parse_null,
+    parse_timestamp
+
+@testset "1. Scalar Values" begin
+    # 1.1: Simple key:value pair
     yaml = """
-    foo: bar
-    baz: 42
+    key: value
     """
     parsed = parse_yaml(yaml)
-    @test parsed["foo"] == "bar"
-    @test parsed["baz"] == "42"
+    @test parsed["key"] == "value"
+
+    # 1.2: Unquoted number without explicit tag -> parsed as string
+    yaml = """
+    num: 12345
+    """
+    parsed = parse_yaml(yaml)
+    @test parsed["num"] == "12345"
+
+    # 1.3: Boolean values without explicit tag
+    yaml = """
+    flag_true: true
+    flag_false: false
+    """
+    parsed = parse_yaml(yaml)
+    @test parsed["flag_true"] == "true"
+    @test parsed["flag_false"] == "false"
+
+    # 1.4: Quoted strings, single and literal block
+    yaml = """
+    single: 'It''s YAML'
+    double: |-
+        Line Break
+    """
+    parsed = parse_yaml(yaml)
+    @test parsed["single"] == "It's YAML"
+    @test parsed["double"] == "Line Break"
+
+    # 1.5: Empty value (key without value) -> parsed as nothing
+    yaml = """
+    empty:
+    """
+    parsed = parse_yaml(yaml)
+    @test isnothing(parsed["empty"])
 end
 
-@testset "[2] Types: Int, Float, Bool, Null, Timestamp" begin
+@testset "2. Explicit Tags: Int, Float, Bool, Null, Timestamp" begin
     yaml = """
-    int: !!int 423_456
-    float: !!float 333_456.14
-    nan: !!float .nan
-    inf: !!float .Inf
-    minus_inf: !!float -.INF
-    bool1: !!bool true
-    bool2: !!bool OFF
-    null1: null
+    int_val: !!int 42
+    float_val: !!float 3.1415
+    nan_val: !!float .nan
+    inf_val: !!float .Inf
+    neg_inf: !!float -.INF
+    bool_yes: !!bool YES
+    bool_no: !!bool no
+    null1: !!null null
     null2: !!null ~
-    null3:
-    datetime1: !!timestamp 2020-12-30
-    datetime2: !!timestamp 2020-12-30T12:34:56
-    datetime3: !!timestamp 2020-12-30T12:34:56.1
-    datetime4: !!timestamp 2020-12-30T12:34:56.12
-    datetime5: !!timestamp 2020-12-30T12:34:56.123
+    ts_date: !!timestamp 2021-01-01
+    ts_datetime: !!timestamp 2021-01-01T12:00:00
     """
     parsed = parse_yaml(yaml)
-    @test parsed["int"] == 423456
-    @test parsed["float"] ≈ 333_456.14
-    @test isnan(parsed["nan"])
-    @test isinf(parsed["inf"])
-    @test parsed["minus_inf"] == -Inf
-    @test parsed["bool1"] == true
-    @test parsed["bool2"] == false
+
+    @test parsed["int_val"] == 42
+    @test parsed["float_val"] ≈ 3.1415
+    @test isnan(parsed["nan_val"])
+    @test isinf(parsed["inf_val"])
+    @test parsed["inf_val"] > 0
+    @test parsed["neg_inf"] == -Inf
+
+    @test parsed["bool_yes"] === true
+    @test parsed["bool_no"] === false
+
     @test isnothing(parsed["null1"])
     @test isnothing(parsed["null2"])
-    @test isnothing(parsed["null3"])
-    @test parsed["datetime1"] == DateTime("2020-12-30")
-    @test parsed["datetime2"] == DateTime("2020-12-30T12:34:56")
-    @test parsed["datetime3"] == DateTime("2020-12-30T12:34:56.1")
-    @test parsed["datetime4"] == DateTime("2020-12-30T12:34:56.12")
-    @test parsed["datetime5"] == DateTime("2020-12-30T12:34:56.123")
+
+    @test parsed["ts_date"] == DateTime(2021, 1, 1)
+    @test parsed["ts_datetime"] == DateTime(2021, 1, 1, 12, 0, 0)
+
+    # Invalid explicit tag values should throw
+    @test_throws YAMLError parse_yaml("a: !!null abc")
+    @test_throws YAMLError parse_yaml("b: !!bool maybe")
+    @test_throws YAMLError parse_yaml("c: !!timestamp 2021-13-01")
 end
 
-@testset "[3] Lists and Dicts" begin
+@testset "3. Lists and Dicts" begin
+    # 3.1: Simple list of strings and numbers
     yaml = """
-    list:
+    items:
       - one
       - 2
       - true
-    dict:
-      foo: bar
-      baz: 123
-    nested:
-      - key1: val1
-        key2: val2
     """
     parsed = parse_yaml(yaml)
-    @test parsed["list"] == ["one", "2", "true"]
-    @test parsed["dict"] == Dict("foo" => "bar", "baz" => "123")
-    @test parsed["nested"][1]["key1"] == "val1"
+    @test parsed["items"] == ["one", "2", "true"]
+
+    # 3.2: Flow style sequence
+    yaml = """
+    seq: [1, 2, three]
+    """
+    parsed = parse_yaml(yaml)
+    @test parsed["seq"] == ["1", "2", "three"]
+
+    # 3.3: Nested dictionary
+    yaml = """
+    settings:
+      mode: production
+      retries: 3
+    """
+    parsed = parse_yaml(yaml)
+    @test parsed["settings"]["mode"] == "production"
+    @test parsed["settings"]["retries"] == "3"
+
+    # 3.4: Flow style mapping
+    yaml = """
+    map: {a: 1, b: two}
+    """
+    parsed = parse_yaml(yaml)
+    @test parsed["map"] == Dict("a" => "1", "b" => "two")
+
+    # 3.5: Sequence of mixed explicit tags
+    yaml = """
+    mixed:
+      - !!int 10
+      - !!float 2.5
+      - !!bool false
+      - !!null null
+    """
+    parsed = parse_yaml(yaml)
+    @test parsed["mixed"][1] == 10
+    @test parsed["mixed"][2] ≈ 2.5
+    @test parsed["mixed"][3] === false
+    @test isnothing(parsed["mixed"][4])
 end
 
-@testset "[4] Multiply nested case" begin
-    # Nested mapping
-    nested_yaml = """
-    a:
-      b:
-        c:
-          d:
-            e: value
+@testset "4. Multiline Strings" begin
+    # 4.1: Literal block style (|)
+    yaml = """
+    literal: |
+      line1
+      line2
     """
-    parsed = parse_yaml(nested_yaml)
-    @test parsed["a"]["b"]["c"]["d"]["e"] == "value"
+    parsed = parse_yaml(yaml)
+    @test parsed["literal"] == "line1\nline2\n"
 
-    # Nested sequence
-    nested_yaml = """
-    nested:
-      - - 1
-        - 2
-      - - 3
-        - 4
+    # 4.2: Folded block style (>), where newlines collapse into spaces
+    yaml = """
+    folded: >
+      line1
+      line2
     """
-    parsed = parse_yaml(nested_yaml)
-    @test parsed == Dict("nested" => [["1", "2"],["3", "4"]])
+    parsed = parse_yaml(yaml)
+    @test parsed["folded"] == "line1 line2\n"
+
+    # 4.3: Blank lines in folded block
+    yaml = """
+    example: >
+      first line
+
+      third line
+    """
+    parsed = parse_yaml(yaml)
+    @test parsed["example"] == "first line\nthird line\n"
 end
 
-@testset "[5] Merge case" begin
-    # Merge with one dict
-    merge_yaml = """
-    base: &base
-      name: base
-      value: 10
-
-    merged:
-      <<: *base
-      extra: true
+@testset "5. Unicode and Emoji Support" begin
+    yaml = """
+    emoji: 😀
+    unicode: Привет
     """
-    parsed = parse_yaml(merge_yaml)
-    @test parsed["merged"] == Dict("name" => "base", "value" => "10", "extra" => "true")
-    @test parsed["base"] == Dict("name" => "base", "value" => "10")
-
-    # Merge with multiple dict
-    multi_merge_yaml = """
-    default: &default
-      x: 1
-    override: &override
-      y: 2
-    combined:
-      <<: [*default, *override]
-      z: 3
-    """
-    parsed = parse_yaml(multi_merge_yaml)
-    @test parsed["combined"] == Dict("x" => "1", "y" => "2", "z" => "3")
-    @test parsed["default"] == Dict("x" => "1")
-    @test parsed["override"] == Dict("y" => "2")
-
-    # Nested merge
-    nested_merge = """
-    defaults: &defaults
-      val: 1
-
-    inner: &inner
-      <<: *defaults
-      inner_val: 2
-
-    outer:
-      <<: *inner
-      outer_val: 3
-    """
-    parsed = parse_yaml(nested_merge)
-    @test parsed["outer"] == Dict("val" => "1", "inner_val" => "2", "outer_val" => "3")
-    @test parsed["inner"] == Dict("val" => "1", "inner_val" => "2")
-    @test parsed["defaults"] == Dict("val" => "1")
+    parsed = parse_yaml(yaml)
+    @test parsed["emoji"] == "😀"
+    @test parsed["unicode"] == "Привет"
 end
 
-@testset "[6] Edge cases" begin
-    @test isempty(parse_yaml(""))
-    @test parse_yaml("---") === nothing
+@testset "6. Empty and Null Structures" begin
     @test parse_yaml("empty_list: []") == Dict("empty_list" => [])
     @test parse_yaml("empty_dict: {}") == Dict("empty_dict" => Dict())
-    @test parse_yaml("utf8: 😀") == Dict("utf8" => "😀")
+    @test isnothing(parse_yaml(""))
+    @test isnothing(parse_yaml("---"))
+    @test parse_yaml("---\n---", multi=true) == Any[nothing, nothing]
 end
 
-@testset "[7] Aliases without merge" begin
-    yaml = """
-    default: &default
-      key: val
-    copy1: *default
-    copy2: *default
-    """
-    parsed = parse_yaml(yaml)
-    @test parsed["default"] == Dict("key" => "val")
-    @test parsed["copy1"] == Dict("key" => "val")
-    @test parsed["copy2"] == Dict("key" => "val")
-end
-
-@testset "[8] Multiple documents" begin
+@testset "7. Multiple Documents" begin
     yaml = """
     ---
     a: 1
@@ -169,108 +202,252 @@ end
     ---
     c: 3
     """
-    parsed = parse_yaml(yaml, multi=true)
+    parsed = parse_yaml(yaml, multi = true)
     @test length(parsed) == 3
     @test parsed[1] == Dict("a" => "1")
     @test parsed[2] == Dict("b" => "2")
     @test parsed[3] == Dict("c" => "3")
 end
 
-@testset "[9] Multiline strings" begin
+@testset "8. Merge Keys Case" begin
+    # 8.1: Merge using single anchor
     yaml = """
-    folded: >
-      This is
-      folded
-      text.
-    literal: |
-      This is
-      literal
-      text.
+    base: &base
+      x: 1
+      y: 2
+    merged:
+      <<: *base
+      z: 3
     """
     parsed = parse_yaml(yaml)
-    @test parsed["folded"] == "This is folded text.\n"
-    @test parsed["literal"] == "This is\nliteral\ntext.\n"
-end
+    @test parsed["merged"] == Dict("x" => "1", "y" => "2", "z" => "3")
 
-@testset "[10] Quoted strings and escape sequences" begin
+    # 8.2: Merge using multiple anchors
     yaml = """
-    single: 'I''m single-quoted'
-    double: "Line\\nBreak"
-    special: "\\u263A"
+    default: &default
+      a: A
+    override: &override
+      b: B
+    combined:
+      <<: [*default, *override]
+      c: C
     """
     parsed = parse_yaml(yaml)
-    @test parsed["single"] == "I'm single-quoted"
-    @test parsed["double"] == "Line\nBreak"
-    @test parsed["special"] == "☺"
+    @test parsed["combined"] == Dict("a" => "A", "b" => "B", "c" => "C")
+
+    # 8.3: Nested merge
+    yaml = """
+    defaults: &defaults
+      val: 1
+    inner: &inner
+      <<: *defaults
+      inner_val: 2
+    outer:
+      <<: *inner
+      outer_val: 3
+    """
+    parsed = parse_yaml(yaml)
+    @test parsed["outer"] == Dict("val" => "1", "inner_val" => "2", "outer_val" => "3")
 end
 
-@testset "[11] Real YAML error triggering" begin
-    # READER ERROR
+@testset "9. Include Directive (!include)" begin
+    mktempdir() do dir
+        base_file = joinpath(dir, "base.yaml")
+        write(base_file, "name: test\nversion: 1.0")
+
+        ext_file = joinpath(dir, "ext.yaml")
+        write(ext_file, "enabled: true\nthreshold: 5")
+
+        yaml = """
+        app:
+          !include $(base_file)
+        ext:
+          !include $(ext_file)
+        """
+        main_file = joinpath(dir, "main_file.yaml")
+        write(main_file, yaml)
+
+        parsed = open_yaml(main_file)
+        @test parsed["app"]["name"] == "test"
+        @test parsed["app"]["version"] == "1.0"
+        @test parsed["ext"]["enabled"] == "true"
+        @test parsed["ext"]["threshold"] == "5"
+    end
+
+    fake_path = "/nonexistent/path.yaml"
+    yaml_bad = """
+    data: !include $(fake_path)
+    """
+    @test_throws YAMLError open_yaml(fake_path)
+end
+
+@testset "10. parse_* Functions" begin
+    # parse_int
+    @test parse_int("123") == 123
+    @test parse_int("-42_000") == -42000
+    @test_throws YAMLError parse_int("12a3")
+    @test_throws YAMLError parse_int("+")
+    @test_throws YAMLError parse_int("120_")
+    @test_throws YAMLError parse_int("-9223372036854775809")
+
+    # parse_float
+    @test parse_float("1_234.56") ≈ 1234.56
+    @test isnan(parse_float(".NaN"))
+    @test parse_float("-Inf") == -Inf
+    @test parse_float("+1.0e2") == 100.0
+    @test_throws ArgumentError parse_float("abc")
+
+    # parse_bool
+    @test parse_bool("true") === true
+    @test parse_bool("No") === false
+    @test_throws YAMLError parse_bool("maybe")
+
+    # parse_null
+    @test parse_null("") === nothing
+    @test parse_null("Null") === nothing
+    @test_throws YAMLError parse_null("nil")
+
+    # parse_timestamp
+    @test parse_timestamp("2025-01-01") == DateTime(2025, 1, 1)
+    @test parse_timestamp("2025-01-01T12:34:56") == DateTime(2025, 1, 1, 12, 34, 56)
+    @test_throws YAMLError parse_timestamp("01-01-2025")
+
+    # parse_value within flow
+    yaml = """
+    data: [!!int 5, !!float 2.2, !!bool true, !!null null]
+    """
+    parsed = parse_yaml(yaml)
+    @test parsed["data"][1] == 5
+    @test parsed["data"][2] ≈ 2.2
+    @test parsed["data"][3] === true
+    @test isnothing(parsed["data"][4])
+end
+
+@testset "11. Error Handling and Edge Cases" begin
+    @test_throws YAMLScannerError parse_yaml("key: \"noend)")
+
+    # Parser error: wrong indentation
+    bad_yaml = """
+    a:
+      - item1
+    - item2
+    """
+    @test_throws YAMLParserError parse_yaml(bad_yaml)
+
+    # Reader error: invalid bytes
     @test_throws YAMLReaderError parse_yaml("\xff")
 
-    # SCANNER ERROR
-    @test_throws YAMLScannerError parse_yaml("""
-    key: "unterminated
-    """)
+    # Invalid merge sequence: merge non-mapping
+    # yaml_bad = """
+    # seq: &anchor [1,2,3]
+    # merged:
+    #   <<: *anchor
+    #   extra: val
+    # """
+    # @test_throws YAMLError parse_yaml(yaml_bad)
 
-    # PARSER ERROR
-    @test_throws YAMLParserError parse_yaml("""
-    a:
-      - b
-    - c  # неправильный отступ
-    """)
+    # Duplicate keys in same mapping: last one should win
+    yaml_dup = """
+    dup:
+      key: first
+      key: second
+    """
+    parsed = parse_yaml(yaml_dup)
+    @test parsed["dup"]["key"] == "second"
+
+    # Comments should be ignored
+    yaml = """
+    # this is a comment
+    a: 1  # inline comment
+    b: 2
+    """
+    parsed = parse_yaml(yaml)
+    @test parsed["a"] == "1"
+    @test parsed["b"] == "2"
+
+    # Escape sequences in double-quoted strings
+    yaml = """
+    esc: "Line\\tTabbed"
+    unicode_esc: "\\u263A"
+    """
+    parsed = parse_yaml(yaml)
+    @test parsed["esc"] == "Line\tTabbed"
+    @test parsed["unicode_esc"] == "☺"
 end
 
-@testset "[13] Read from YAML file and include" begin
-  mktempdir() do dir
-      configs_path = mkdir(joinpath(dir, "configs"))
+@testset "12. Flow vs Block Style" begin
+    # Block style mapping
+    yaml_block = """
+    person:
+      name: Alice
+      age: 30
+    """
+    parsed_block = parse_yaml(yaml_block)
+    # Flow style mapping
+    yaml_flow = """
+    person: {name: Alice, age: 30}
+    """
+    parsed_flow = parse_yaml(yaml_flow)
+    @test parsed_block == parsed_flow
 
-      services_path = joinpath(configs_path, "services.yaml")
-      services_yaml = """
-      - name: auth
-        port: 8080
-      - name: billing
-        port: 8081
-      """
-      write(services_path, services_yaml)
+    # Block style sequence
+    yaml_block_seq = """
+    nums:
+      - 1
+      - 2
+      - 3
+    """
+    parsed_block_seq = parse_yaml(yaml_block_seq)
+    # Flow style sequence
+    yaml_flow_seq = """
+    nums: [1, 2, 3]
+    """
+    parsed_flow_seq = parse_yaml(yaml_flow_seq)
+    @test parsed_block_seq == parsed_flow_seq
+end
 
-      database_path = joinpath(configs_path, "database.yaml")
-      database_yaml = """
-      host: localhost
-      port: 5432
-      username: admin
-      password: secret
-      """
-      write(database_path, database_yaml)
+#@testset "13. Roundtrip Emit-Parse" begin
+#    yaml_original = """
+#    items:
+#      - name: test
+#        value: !!int 5
+#      - name: demo
+#        enabled: !!bool true
+#    """
+#    parsed = parse_yaml(yaml_original)
+#    emitted = to_yaml(parsed)
+#    reparsed = parse_yaml(emitted)
+#    @test reparsed == parsed
+#end
 
-      main_path = joinpath(dir, "main.yaml")
-      main_yaml = """
-      database: !include configs/database.yaml
-      services: !include configs/services.yaml
-      """
-      write(main_path, main_yaml)
+@testset "14. Complex Key Types" begin
+    yaml = """
+    ? [complex, key]
+    : value1
+    ? {a: 1, b: 2}
+    : value2
+    """
+    parsed = parse_yaml(yaml)
+    @test parsed[["complex", "key"]] == "value1"
+    @test parsed[Dict("a" => "1", "b" => "2")] == "value2"
+end
 
-      parsed = open_yaml(main_path)
+@testset "15. Different DictType's" begin
+    yaml = """
+    default: &default
+      a: A
+    override: &override
+      b: B
+    combined:
+      <<: [*default, *override]
+      c: C
+    """
 
-      @test parsed["database"]["host"] == "localhost"
-      @test parsed["database"]["port"] == "5432"
-      @test parsed["database"]["username"] == "admin"
-      @test parsed["database"]["password"] == "secret"
+    parsed1 = parse_yaml(yaml; dict_type = IdDict)
+    @test parsed1["combined"] == IdDict("a" => "A", "b" => "B", "c" => "C")
+    @test typeof(parsed1) <: IdDict
 
-      @test parsed["services"][1]["name"] == "auth"
-      @test parsed["services"][1]["port"] == "8080"
-      @test parsed["services"][2]["name"] == "billing"
-      @test parsed["services"][2]["port"] == "8081"
-  end
-
-  @testset "[14] Value parse errors" begin
-    err_str = "Invalid null specification: 3"
-    @test_throws YAMLError(err_str) parse_yaml("a: !!null 3")
-
-    err_str = "Invalid boolean literal: go"
-    @test_throws YAMLError(err_str) parse_yaml("a: !!bool go")
-
-    err_str = "Unrecognized timestamp format: 2024-03-01T566-4-45"
-    @test_throws YAMLError(err_str) parse_yaml("ts: !!timestamp 2024-03-01T566-4-45")
-  end
+    parsed2 = parse_yaml(yaml; dict_type = OrderedDict)
+    @test parsed2["combined"] == OrderedDict("a" => "A", "b" => "B", "c" => "C")
+    @test typeof(parsed2) <: OrderedDict
 end

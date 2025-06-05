@@ -1,0 +1,6 @@
+enabled: true
+output: "/var/log/audit.log"
+rotate_daily: true
+redact_fields:
+  - password
+  - token
