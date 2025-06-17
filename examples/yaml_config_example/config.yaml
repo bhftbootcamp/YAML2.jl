@@ -1,0 +1,8 @@
+server: !include server.yaml
+security: !include security.yaml
+audit: !include audit.yaml
+logging:
+  level: "info"
+  output: "stdout"
+  format: "json"
+metrics: !include metrics.yaml
