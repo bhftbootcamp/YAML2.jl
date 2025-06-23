@@ -8,6 +8,10 @@
 
 A Julia wrapper for [libyaml](https://github.com/yaml/libyaml), providing fast and minimal YAML parsing.
 
+## Why LibYAML2.jl?
+
+[LibYAML.jl](https://github.com/JuliaData/LibYAML.jl) was unmaintained at the time `LibYAML2.jl` was created.
+
 ## Installation
 
 To install LibYAML2, simply use the Julia package manager:
